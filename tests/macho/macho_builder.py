@@ -16,6 +16,8 @@ from utils import get_sample
 from lief import Logger
 Logger.set_level(lief.LOGGING_LEVEL.WARNING)
 
+CURRENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+STUB = os.path.join(CURRENT_DIRECTORY, "HelloWorld.shellcode")
 
 def run_program(path, args=None):
     # Make sure the program had exec permission
@@ -288,6 +290,61 @@ class TestLibraryInjection(TestCase):
             self.logger.debug(stdout)
             self.assertIsNotNone(re.search(r'CTOR CALLED', stdout))
 
+
+
+class TestShellCodeInjection(TestCase):
+    def setUp(self):
+        self.logger = logging.getLogger(__name__)
+        self.shellcode = None
+        with open(STUB, "rb") as f:
+            self.shellcode = list(f.read())
+
+
+    def test_all(self):
+        original = lief.parse(get_sample('MachO/MachO64_x86-64_binary_all.bin'))
+        _, output = tempfile.mkstemp(prefix="lief_all_")
+
+        section = lief.MachO.Section("__shell", self.shellcode)
+        section.alignment = 2
+        section += lief.MachO.SECTION_FLAGS.SOME_INSTRUCTIONS
+        section += lief.MachO.SECTION_FLAGS.PURE_INSTRUCTIONS
+
+        section = original.add_section(section)
+
+        __TEXT = original.get_segment("__TEXT")
+
+        original.main_command.entrypoint = section.virtual_address - __TEXT.virtual_address
+
+        original.write(output)
+
+        if sys.platform.startswith("darwin"):
+            stdout = run_program(output)
+            self.logger.debug(stdout)
+            self.assertIsNotNone(re.search(r'Hello World!', stdout))
+
+
+    def test_ssh(self):
+        original = lief.parse(get_sample('MachO/MachO64_x86-64_binary_sshd.bin'))
+        _, output = tempfile.mkstemp(prefix="lief_ssh_")
+
+        section = lief.MachO.Section("__shell", self.shellcode)
+        section.alignment = 2
+        section += lief.MachO.SECTION_FLAGS.SOME_INSTRUCTIONS
+        section += lief.MachO.SECTION_FLAGS.PURE_INSTRUCTIONS
+
+        section = original.add_section(section)
+
+        __TEXT = original.get_segment("__TEXT")
+
+        original.main_command.entrypoint = section.virtual_address - __TEXT.virtual_address
+        original.remove_signature()
+
+        original.write(output)
+
+        if sys.platform.startswith("darwin"):
+            stdout = run_program(output)
+            self.logger.debug(stdout)
+            self.assertIsNotNone(re.search(r'Hello World!', stdout))
 
 
 if __name__ == '__main__':
