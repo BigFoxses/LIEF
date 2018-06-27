@@ -215,6 +215,67 @@ class TestSectionSegment(TestCase):
 
 
 
+
+class TestLibraryInjection(TestCase):
+    COUNT = 0
+    LIBRARY_CODE = r"""\
+    #include <stdio.h>
+    #include <stdlib.h>
+
+    __attribute__((constructor))
+    void my_constructor(void) {
+      printf("CTOR CALLED\n");
+    }
+    """
+
+    @staticmethod
+    def compile(output, extra_flags=None):
+        if not sys.platform.startswith("darwin"):
+            return
+
+        logger = logging.getLogger(__name__)
+        if os.path.isfile(output):
+            os.remove(output)
+
+        extra_flags = extra_flags if extra_flags else []
+        _, srcpath = tempfile.mkstemp(prefix="libexample_", suffix=".c")
+
+        with open(srcpath, 'w') as f:
+            f.write(TestLibraryInjection.LIBRARY_CODE)
+
+        COMPILER = "/usr/bin/clang"
+        CC_FLAGS = ['-fPIC', '-shared'] + extra_flags
+
+        cmd = [COMPILER, '-o', output] + CC_FLAGS + [srcpath]
+        logger.debug("Compile 'libexample' with: {}".format(" ".join(cmd)))
+
+        p = Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+        stdout, _ = p.communicate()
+
+        logger.debug(stdout)
+        return output
+
+    def setUp(self):
+        self.logger = logging.getLogger(__name__)
+        _, self.library_path = tempfile.mkstemp(prefix="libexample_", suffix=".dylib")
+        TestLibraryInjection.compile(self.library_path)
+
+    def test_all(self):
+        original = lief.parse(get_sample('MachO/MachO64_x86-64_binary_all.bin'))
+        _, output = tempfile.mkstemp(prefix="lief_all_")
+
+        original.add_library(self.library_path)
+
+        original.write(output)
+
+        if sys.platform.startswith("darwin"):
+            stdout = run_program(output)
+            self.logger.debug(stdout)
+            self.assertIsNotNone(re.search(r'CTOR CALLED', stdout))
+
+
+
 if __name__ == '__main__':
 
     root_logger = logging.getLogger()
