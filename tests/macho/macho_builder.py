@@ -275,6 +275,20 @@ class TestLibraryInjection(TestCase):
             self.assertIsNotNone(re.search(r'CTOR CALLED', stdout))
 
 
+    def test_ssh(self):
+        original = lief.parse(get_sample('MachO/MachO64_x86-64_binary_sshd.bin'))
+        _, output = tempfile.mkstemp(prefix="lief_ssh_")
+
+        original.add_library(self.library_path)
+
+        original.write(output)
+
+        if sys.platform.startswith("darwin"):
+            stdout = run_program(output, ["--help"])
+            self.logger.debug(stdout)
+            self.assertIsNotNone(re.search(r'CTOR CALLED', stdout))
+
+
 
 if __name__ == '__main__':
 
