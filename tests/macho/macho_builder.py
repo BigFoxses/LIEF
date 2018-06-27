@@ -299,6 +299,9 @@ class TestShellCodeInjection(TestCase):
         with open(STUB, "rb") as f:
             self.shellcode = list(f.read())
 
+        # For Python 2
+        if type(self.shellcode[0]) is str:
+            self.shellcode = list(map(ord, self.shellcode))
 
     def test_all(self):
         original = lief.parse(get_sample('MachO/MachO64_x86-64_binary_all.bin'))
